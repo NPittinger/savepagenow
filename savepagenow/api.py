@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import click
+import re
 import requests
 from .exceptions import (
     CachedPage,
@@ -50,13 +51,6 @@ def capture(
     if response.status_code in [403, 502, 520]:
         raise WaybackRuntimeError(response.headers)
 
-    # The link object marked as the `memento` is the one we want to return
-    try:
-        content_location = response.headers['Content-Location']
-        archive_url = domain + content_location
-    except KeyError:
-        raise WaybackRuntimeError(dict(status_code=response.status_code, headers=response.headers))
-
     # Determine if the response was cached
     cached = 'X-Page-Cache' in response.headers and response.headers['X-Page-Cache'] == 'HIT'
 
@@ -67,6 +61,15 @@ def capture(
             # ... throw an error
             msg = "archive.org returned a cache of this page: {}".format(archive_url)
             raise CachedPage(msg)
+
+    # The link object marked as the `memento` is the one we want to return
+    try:
+        link_string = response.headers['Link']
+        link_dict = re.findall('<.*?>', link_string)
+        archive_url = link_dict[4]
+        archive_url = archive_url[1:-1]
+    except KeyError:
+        raise WaybackRuntimeError(dict(status_code=response.status_code, headers=response.headers))
 
     # Finally, return the archived URL
     return archive_url
